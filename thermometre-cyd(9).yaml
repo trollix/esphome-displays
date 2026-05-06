@@ -1,0 +1,394 @@
+## ============================================================================
+##  Thermomètre + Énergie HA — ESP32-3248S035C (CYD 3.5" capacitif)
+##  Page 1 : Températures (extérieur, piscine, intérieur)
+##  Page 2 : Énergie (tarif HP/HC, solaire net, consommation maison)
+##  Navigation : tap sur l'écran = page suivante
+## ============================================================================
+ 
+esphome:
+  name: thermometre-cyd
+  friendly_name: Thermomètre CYD
+ 
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+ 
+logger:
+  level: INFO
+ 
+
+api:
+  encryption:
+    key: "4dqy4z+80Z3GmLlWhw5PgR0GAXelgHtb0A2YMy+zSpc="
+ 
+ota:
+  - platform: esphome
+    password: esphome
+ 
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  
+  ap:
+    ssid: "Thermometre Fallback"
+ 
+
+time:
+  - platform: homeassistant
+    id: ha_time
+    timezone: Europe/Paris
+
+
+## ----------------------------------------------------------------------------
+##  Hardware — pinout ESP32-3248S035C
+## ----------------------------------------------------------------------------
+spi:
+  - id: tft_spi
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+
+i2c:
+  - id: bus_touch
+    sda: GPIO33
+    scl: GPIO32
+    scan: false
+
+output:
+  - platform: ledc
+    pin: GPIO27
+    id: backlight_pwm
+    frequency: 1000Hz
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: "Rétroéclairage"
+    id: backlight
+    restore_mode: RESTORE_DEFAULT_ON
+
+## ----------------------------------------------------------------------------
+##  Tactile capacitif FT6336U
+##  Tap (relâchement du doigt) → page suivante
+## ----------------------------------------------------------------------------
+touchscreen:
+  - platform: gt911
+    id: tft_touch
+    i2c_id: bus_touch
+    reset_pin: GPIO25
+    on_touch:
+      then:
+        - globals.set:
+            id: current_page
+            value: !lambda 'return (id(current_page) + 1) % 2;'
+        - component.update: disp
+
+## ----------------------------------------------------------------------------
+##  État global : page courante (0 = Temp, 1 = Énergie)
+## ----------------------------------------------------------------------------
+globals:
+  - id: current_page
+    type: int
+    initial_value: '0'
+    restore_value: false
+
+## ----------------------------------------------------------------------------
+##  Couleurs
+##  Important : avec color_order: bgr, on garde ici des couleurs RGB normales.
+##  Pas de correction manuelle R/B dans le bloc color.
+## ----------------------------------------------------------------------------
+color:
+
+  # Fond / texte
+  - id: c_bg
+    red:   4%
+    green: 6%
+    blue:  8%
+  - id: c_text
+    red:   94%
+    green: 96%
+    blue:  97%
+  - id: c_label
+    red:   66%
+    green: 70%
+    blue:  74%
+  - id: c_dim
+    red:   38%
+    green: 42%
+    blue:  47%
+  - id: c_sep
+    red:   12%
+    green: 16%
+    blue:  20%
+  - id: c_badge_bg
+    red:   7%
+    green: 10%
+    blue:  13%
+
+  # Palette thermique lisible sur fond sombre
+  - id: c_blue
+    red:   20%
+    green: 48%
+    blue:  95%
+  - id: c_green
+    red:   25%
+    green: 78%
+    blue:  45%
+  - id: c_yellow
+    red:   95%
+    green: 76%
+    blue:  25%
+  - id: c_orange
+    red:   96%
+    green: 45%
+    blue:  16%
+  - id: c_red
+    red:   95%
+    green: 22%
+    blue:  20%
+
+    
+## ----------------------------------------------------------------------------
+##  Polices
+## ----------------------------------------------------------------------------
+font:
+  - file: "fonts/Roboto-Regular.ttf"
+    id: f_header
+    size: 16
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZÀÂÄÈÉÊËÎÏÔÖÙÛÜabcdefghijklmnopqrstuvwxyzàâäèéêëîïôöùûü0123456789 .,:°…-+"
+  - file: "fonts/Roboto-Regular.ttf"
+    id: f_label
+    size: 32
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZÀÂÄÈÉÊËÎÏÔÖÙÛÜabcdefghijklmnopqrstuvwxyzàâäèéêëîïôöùûü0123456789 .,:°…-+"
+  - file: "fonts/Roboto-Medium.ttf"
+    id: f_value
+    size: 40
+    glyphs: "0123456789.-+"
+  - file: "fonts/Roboto-Regular.ttf"
+    id: f_unit
+    size: 24
+    glyphs: "°CkW"
+  - file: "fonts/Roboto-Regular.ttf"
+    id: f_footer
+    size: 13
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZÀÂÄÈÉÊËÎÏÔÖÙÛÜabcdefghijklmnopqrstuvwxyzàâäèéêëîïôöùûü0123456789 .,:°…-"
+  - file: "fonts/Roboto-SemiBold.ttf"
+    id: f_badge
+    size: 30
+    glyphs: "HCP/"
+
+  # MDI: weather-sunny (F0599), pool (F0606), home (F02DC), flash (F0241)
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: f_icons
+    size: 36
+    glyphs: ["\U000F0599", "\U000F0606", "\U000F02DC", "\U000F0241"]
+
+  # MDI: wifi (F05A9), wifi-off (F05AA)
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: f_wifi
+    size: 14
+    glyphs: ["\U000F05A9", "\U000F05AA"]
+
+## ----------------------------------------------------------------------------
+##  Capteurs depuis Home Assistant
+## ----------------------------------------------------------------------------
+sensor:
+  # Page Températures
+  - platform: homeassistant
+    id: t_ext
+    entity_id: sensor.gw3000a_outdoor_temperature
+    internal: true
+  - platform: homeassistant
+    id: t_int
+    entity_id: sensor.gw3000a_indoor_temperature
+    internal: true
+  - platform: homeassistant
+    id: t_pool
+    entity_id: sensor.gr_th_piscine
+    internal: true
+  # Page Énergie (valeurs supposées en Watts — voir note de bas de fichier)
+  - platform: homeassistant
+    id: p_prod_solaire
+    entity_id: sensor.gr_power_prod_solaire
+    internal: true
+  - platform: homeassistant
+    id: p_house
+    entity_id: sensor.maison_puissance_gf
+    internal: true
+
+text_sensor:
+  - platform: homeassistant
+    id: tarif
+    entity_id: sensor.em_li_lixee_ltarf
+    internal: true
+
+binary_sensor:
+  - platform: status
+    id: api_status
+    name: "Connexion HA"
+
+## ----------------------------------------------------------------------------
+##  Affichage — 2 pages, switchées via touch
+## ----------------------------------------------------------------------------
+
+display:
+  - platform: mipi_spi
+    id: disp
+    model: ST7796
+    spi_id: tft_spi
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    invert_colors: false
+    update_interval: 10s
+    color_order: bgr
+    draw_rounding: 1
+    auto_clear_enabled: false
+    dimensions:
+      width: 480
+      height: 320
+    transform:
+      swap_xy: true
+      mirror_x: false
+      mirror_y: false
+    lambda: |-
+
+
+      const char* ICON_SUN   = "\U000F0599"; // mdi:weather-sunny
+      const char* ICON_POOL  = "\U000F0606"; // mdi:pool
+      const char* ICON_HOME  = "\U000F02DC"; // mdi:home
+      const char* ICON_FLASH = "\U000F0241"; // mdi:flash
+      const char* ICON_WIFI  = "\U000F05A9"; // mdi:wifi
+      const char* ICON_NOWIFI = "\U000F05AA"; // mdi:wifi-off
+
+      // Fond uni
+      it.fill(id(c_bg));
+
+      // ---------- Helpers communs ----------
+      auto draw_dots = [&]() {
+        int active = id(current_page);
+        it.filled_circle(444, 30, 4, active == 0 ? id(c_text) : id(c_dim));
+        it.filled_circle(460, 30, 4, active == 1 ? id(c_text) : id(c_dim));
+      };
+
+      // FOOTER
+      auto draw_footer = [&]() {
+        it.line(20, 265, 460, 265, id(c_sep));
+        auto t = id(ha_time).now();
+        if (t.is_valid()) {
+          char buf[24];
+          t.strftime(buf, sizeof(buf), "Mise à jour %H:%M");
+          it.print(20, 295, id(f_footer), id(c_dim), TextAlign::BASELINE_LEFT, buf);
+        } else {
+          it.print(20, 295, id(f_footer), id(c_dim), TextAlign::BASELINE_LEFT, "Connexion…");
+        }
+        const char* w = id(api_status).state ? ICON_WIFI : ICON_NOWIFI;
+        it.print(460, 295, id(f_wifi), id(c_dim), TextAlign::BASELINE_RIGHT, w);
+      };
+      // FIN FOOTER
+
+      auto color_temp_ext = [&](float v) -> Color {
+        if (v < 5.0f)  return id(c_blue);
+        if (v < 15.0f) return id(c_yellow);
+        if (v < 25.0f) return id(c_green);
+        if (v < 30.0f) return id(c_orange);
+        return id(c_red);
+      };
+
+      auto color_temp_pool = [&](float v) -> Color {
+        if (v < 20.0f) return id(c_blue);
+        if (v < 24.0f) return id(c_yellow);
+        if (v < 29.0f) return id(c_green);
+        if (v < 31.0f) return id(c_orange);
+        return id(c_red);
+      };
+
+      auto color_temp_int = [&](float v) -> Color {
+        if (v < 18.5f) return id(c_blue);
+        if (v < 21.0f) return id(c_green);
+        if (v < 24.5f) return id(c_yellow);
+        return id(c_orange);
+      };
+
+      auto draw_temp_row = [&](int yb, const char* icon, Color ic, const char* label, sensor::Sensor* s) {
+        
+        it.print(48, yb, id(f_icons), ic, TextAlign::BASELINE_CENTER, icon);
+        it.print(85, yb, id(f_label), id(c_label), TextAlign::BASELINE_LEFT, label);
+        if (s->has_state()) {
+          char buf[12];
+          snprintf(buf, sizeof(buf), "%.1f", s->state);
+          it.print(415, yb, id(f_value), id(c_text), TextAlign::BASELINE_RIGHT, buf);
+          it.print(420, yb, id(f_unit), id(c_dim), TextAlign::BASELINE_LEFT, "°C");
+        } else {
+          it.print(415, yb, id(f_value), id(c_dim), TextAlign::BASELINE_RIGHT, "--.-");
+        }
+      };
+
+      auto draw_power_row = [&](int yb, const char* icon, Color ic, const char* label, sensor::Sensor* s, bool show_sign) {
+        
+        it.print(48, yb, id(f_icons), ic, TextAlign::BASELINE_CENTER, icon);
+        it.print(85, yb, id(f_label), id(c_label), TextAlign::BASELINE_LEFT, label);
+        
+        if (s->has_state()) {
+          float v = s->state;
+          char buf[12];
+          snprintf(buf, sizeof(buf), show_sign ? "%+.0f" : "%.0f", v);
+          Color col = id(c_text);
+          if (show_sign) {
+            col = (v >= 0.0f) ? id(c_green) : id(c_red);
+          }
+          it.print(415, yb, id(f_value), col, TextAlign::BASELINE_RIGHT, buf);
+          it.print(420, yb, id(f_unit), id(c_dim), TextAlign::BASELINE_LEFT, "W");
+        } else {
+          it.print(415, yb, id(f_value), id(c_dim), TextAlign::BASELINE_RIGHT, "--");
+        }
+      };
+
+      // ---------- PAGE 0 : TEMPÉRATURES ----------
+      if (id(current_page) == 0) {
+        it.print(20, 32, id(f_header), id(c_label), TextAlign::BASELINE_LEFT, "TEMPÉRATURES");
+        it.line(20, 50, 425, 50, id(c_sep));
+
+        Color ext_col  = id(t_ext).has_state()  ? color_temp_ext(id(t_ext).state)   : id(c_dim);
+        Color int_col  = id(t_int).has_state()  ? color_temp_int(id(t_int).state)   : id(c_dim);
+        Color pool_col = id(t_pool).has_state() ? color_temp_pool(id(t_pool).state) : id(c_dim);
+
+        draw_temp_row(110, ICON_SUN, ext_col,  "Extérieur", id(t_ext));
+        draw_temp_row(178, ICON_HOME, int_col,  "Intérieur", id(t_int));
+        draw_temp_row(246, ICON_POOL, pool_col, "Piscine",   id(t_pool));
+        
+      }
+      // ---------- PAGE 1 : ÉNERGIE ----------
+      else {
+
+        // HEADER
+        it.print(20, 32, id(f_header), id(c_label), TextAlign::BASELINE_LEFT, "ÉNERGIE");
+        it.line(20, 50, 425, 50, id(c_sep));
+        // FIN HEADER
+        
+        it.print(48, 110, id(f_icons), id(c_blue), TextAlign::BASELINE_CENTER, ICON_FLASH);
+        it.print(85, 110, id(f_label), id(c_label), TextAlign::BASELINE_LEFT, "Tarif EDF");
+
+        if (id(tarif).has_state()) {
+          const std::string& tar = id(tarif).state;
+          bool is_hc = (tar.find("HC") != std::string::npos) ||
+                       (tar.find("CREUSE") != std::string::npos) ||
+                       (tar.find("creuse") != std::string::npos);
+          
+          Color hp_col = is_hc ? id(c_text) : id(c_orange);
+          Color hc_col = is_hc ? id(c_blue) : id(c_text);
+
+          it.print(358, 97, id(f_badge), hp_col, TextAlign::CENTER, "HP");
+          it.print(390, 97, id(f_badge), id(c_dim), TextAlign::CENTER, "/");
+          it.print(422, 97, id(f_badge), hc_col, TextAlign::CENTER, "HC");
+
+        } else {
+          it.print(415, 110, id(f_value), id(c_dim), TextAlign::BASELINE_RIGHT, "--");
+        }
+
+        draw_power_row(178, ICON_SUN, id(c_yellow), "Prod. Solaire", id(p_prod_solaire), true);
+        draw_power_row(246, ICON_HOME, id(c_orange), "Conso. Maison", id(p_house), false);
+      }
+
+      draw_dots();
+      draw_footer();
