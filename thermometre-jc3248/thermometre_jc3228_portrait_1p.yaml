@@ -1,0 +1,482 @@
+## ============================================================================
+##  Thermomètre + Énergie HA — JC3248W535C (ESP32-S3 3.5" capacitif)
+##  Version 1 page PORTRAIT : Températures + Énergie
+## ============================================================================
+
+esphome:
+  name: thermometre-jc3248
+  friendly_name: Thermomètre JC3248
+  on_boot:
+    priority: -100
+    then:
+      - light.turn_on:
+          id: backlight
+          brightness: 100%
+          transition_length: 0s
+      - globals.set:
+          id: is_dimmed
+          value: 'false'
+      - script.execute: dim_timer
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: esp32s3
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+  ap:
+    ssid: "Thermometre Fallback"
+
+captive_portal:
+
+time:
+  - platform: homeassistant
+    id: ha_time
+    timezone: Europe/Paris
+
+substitutions:
+  dim_delay: "3min"
+
+## ----------------------------------------------------------------------------
+##  PSRAM
+## ----------------------------------------------------------------------------
+psram:
+  mode: octal
+  speed: 80MHz
+
+## ----------------------------------------------------------------------------
+##  Hardware — pinout JC3248W535C
+## ----------------------------------------------------------------------------
+spi:
+  - id: tft_spi
+    type: quad
+    clk_pin: 47
+    data_pins: [21, 48, 40, 39]
+
+i2c:
+  - id: bus_touch
+    sda: 4
+    scl: 8
+    scan: false
+
+output:
+  - platform: ledc
+    pin: 1
+    id: backlight_pwm
+    frequency: 1000Hz
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: "Rétroéclairage"
+    id: backlight
+    restore_mode: RESTORE_DEFAULT_ON
+
+## ----------------------------------------------------------------------------
+##  Tactile — tap = réveil écran + reset timer
+## ----------------------------------------------------------------------------
+touchscreen:
+  - platform: axs15231
+    id: tft_touch
+    i2c_id: bus_touch
+    on_touch:
+      then:
+        - light.turn_on:
+            id: backlight
+            brightness: 100%
+            transition_length: 0.3s
+        - globals.set:
+            id: is_dimmed
+            value: 'false'
+        - script.execute: dim_timer
+        - component.update: disp
+
+## ----------------------------------------------------------------------------
+##  État global
+## ----------------------------------------------------------------------------
+globals:
+  - id: is_dimmed
+    type: bool
+    initial_value: 'false'
+    restore_value: false
+
+script:
+  - id: dim_timer
+    mode: restart
+    then:
+      - delay: $dim_delay
+      - light.turn_on:
+          id: backlight
+          brightness: 30%
+          transition_length: 2s
+      - globals.set:
+          id: is_dimmed
+          value: 'true'
+
+## ----------------------------------------------------------------------------
+##  Couleurs
+## ----------------------------------------------------------------------------
+color:
+  - id: c_bg
+    red:   4%
+    green: 6%
+    blue:  8%
+
+  - id: c_text
+    red:   94%
+    green: 96%
+    blue:  97%
+
+  - id: c_label
+    red:   66%
+    green: 70%
+    blue:  74%
+
+  - id: c_dim
+    red:   38%
+    green: 42%
+    blue:  47%
+
+  - id: c_sep
+    red:   12%
+    green: 16%
+    blue:  20%
+
+  - id: c_blue
+    red:   20%
+    green: 48%
+    blue:  95%
+
+  - id: c_green
+    red:   25%
+    green: 78%
+    blue:  45%
+
+  - id: c_yellow
+    red:   95%
+    green: 76%
+    blue:  25%
+
+  - id: c_orange
+    red:   96%
+    green: 45%
+    blue:  16%
+
+  - id: c_red
+    red:   95%
+    green: 22%
+    blue:  20%
+
+## ----------------------------------------------------------------------------
+##  Polices
+## ----------------------------------------------------------------------------
+font:
+  - file: "fonts/Roboto-Regular.ttf"
+    id: f_header
+    size: 16
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZÀÂÄÈÉÊËÎÏÔÖÙÛÜabcdefghijklmnopqrstuvwxyzàâäèéêëîïôöùûü0123456789 .,:°…-+"
+
+  - file: "fonts/Roboto-Regular.ttf"
+    id: f_label_compact
+    size: 30
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZÀÂÄÈÉÊËÎÏÔÖÙÛÜabcdefghijklmnopqrstuvwxyzàâäèéêëîïôöùûü0123456789 .,:°…-+"
+
+  - file: "fonts/Roboto-Medium.ttf"
+    id: f_value_compact
+    size: 34
+    glyphs: "0123456789.-+"
+
+  - file: "fonts/Roboto-Regular.ttf"
+    id: f_unit_compact
+    size: 20
+    glyphs: "°CW"
+
+  - file: "fonts/Roboto-Regular.ttf"
+    id: f_footer
+    size: 13
+    glyphs: "ABCDEFGHIJKLMNOPQRSTUVWXYZÀÂÄÈÉÊËÎÏÔÖÙÛÜabcdefghijklmnopqrstuvwxyzàâäèéêëîïôöùûü0123456789 .,:°…-"
+
+  - file: "fonts/Roboto-Medium.ttf"
+    id: f_zoe_compact
+    size: 26
+    glyphs: "0123456789.-+ %km"
+
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: f_icons_compact
+    size: 34
+    glyphs:
+      - "\U000F0599"  # weather-sunny
+      - "\U000F0606"  # pool
+      - "\U000F02DC"  # home
+      - "\U000F0241"  # flash
+
+  - file: "fonts/materialdesignicons-webfont.ttf"
+    id: f_wifi
+    size: 14
+    glyphs:
+      - "\U000F05A9"  # wifi
+      - "\U000F05AA"  # wifi-off
+
+image:
+  - file: "images/bg_thermometre_portrait_320x480.png"
+    id: bg_thermometre
+    type: RGB565
+
+## ----------------------------------------------------------------------------
+##  Capteurs Home Assistant
+## ----------------------------------------------------------------------------
+sensor:
+  - platform: homeassistant
+    id: t_ext
+    entity_id: sensor.gw3000a_outdoor_temperature
+    internal: true
+
+  - platform: homeassistant
+    id: t_int
+    entity_id: sensor.gw3000a_indoor_temperature
+    internal: true
+
+  - platform: homeassistant
+    id: t_pool
+    entity_id: sensor.gr_th_piscine
+    internal: true
+
+  - platform: homeassistant
+    id: p_prod_solaire
+    entity_id: sensor.gr_power_prod_solaire
+    internal: true
+
+  - platform: homeassistant
+    id: p_house
+    entity_id: sensor.maison_puissance_gf
+    internal: true
+
+  - platform: homeassistant
+    id: zoe_battery_percent
+    entity_id: sensor.fn451xy_batterie
+    internal: true
+
+  - platform: homeassistant
+    id: zoe_range_km
+    entity_id: sensor.fn451xy_autonomie_de_la_batterie
+    internal: true
+
+text_sensor:
+  - platform: homeassistant
+    id: tarif
+    entity_id: sensor.em_li_lixee_ltarf
+    internal: true
+
+binary_sensor:
+  - platform: status
+    id: api_status
+    name: "Connexion HA"
+
+## ----------------------------------------------------------------------------
+##  Affichage — version 1 page PORTRAIT
+## ----------------------------------------------------------------------------
+display:
+  - platform: mipi_spi
+    id: disp
+    model: JC3248W535
+    spi_id: tft_spi
+    data_rate: 40MHz
+    update_interval: 10s
+    auto_clear_enabled: true
+    rotation: 0
+
+    lambda: |-
+
+      const char* ICON_SUN    = "\U000F0599"; // mdi:weather-sunny
+      const char* ICON_POOL   = "\U000F0606"; // mdi:pool
+      const char* ICON_HOME   = "\U000F02DC"; // mdi:home
+      const char* ICON_FLASH  = "\U000F0241"; // mdi:flash
+      const char* ICON_WIFI   = "\U000F05A9"; // mdi:wifi
+      const char* ICON_NOWIFI = "\U000F05AA"; // mdi:wifi-off
+
+      it.image(0, 0, id(bg_thermometre));
+      // Si tu n'as pas encore de fond portrait :
+      // it.fill(id(c_bg));
+
+      // ------------------------------------------------------------
+      // Couleurs températures
+      // ------------------------------------------------------------
+      auto color_temp_ext = [&](float v) -> Color {
+        if (v < 5.0f)  return id(c_blue);
+        if (v < 15.0f) return id(c_yellow);
+        if (v < 25.0f) return id(c_green);
+        if (v < 30.0f) return id(c_orange);
+        return id(c_red);
+      };
+
+      auto color_temp_pool = [&](float v) -> Color {
+        if (v < 20.0f) return id(c_blue);
+        if (v < 24.0f) return id(c_yellow);
+        if (v < 29.0f) return id(c_green);
+        if (v < 31.0f) return id(c_orange);
+        return id(c_red);
+      };
+
+      auto color_temp_int = [&](float v) -> Color {
+        if (v < 18.5f) return id(c_blue);
+        if (v < 21.0f) return id(c_green);
+        if (v < 24.5f) return id(c_yellow);
+        return id(c_orange);
+      };
+
+      // ------------------------------------------------------------
+      // Ligne température portrait
+      // ------------------------------------------------------------
+      auto draw_temp_row = [&](int yb, const char* icon, Color ic, const char* label, sensor::Sensor* s, Color val_col) {
+        it.print(30, yb, id(f_icons_compact), ic, TextAlign::BASELINE_CENTER, icon);
+        it.print(64, yb, id(f_label_compact), id(c_label), TextAlign::BASELINE_LEFT, label);
+
+        if (s->has_state()) {
+          char buf[12];
+          snprintf(buf, sizeof(buf), "%.1f", s->state);
+          it.print(276, yb, id(f_value_compact), val_col, TextAlign::BASELINE_RIGHT, buf);
+          it.print(282, yb, id(f_unit_compact), id(c_dim), TextAlign::BASELINE_LEFT, "°C");
+        } else {
+          it.print(276, yb, id(f_value_compact), id(c_dim), TextAlign::BASELINE_RIGHT, "--.-");
+        }
+      };
+
+      // ------------------------------------------------------------
+      // Ligne énergie portrait
+      // ------------------------------------------------------------
+      auto draw_power_row = [&](int yb, const char* icon, Color ic, const char* label, sensor::Sensor* s, bool show_sign) {
+        it.print(30, yb, id(f_icons_compact), ic, TextAlign::BASELINE_CENTER, icon);
+        it.print(64, yb, id(f_label_compact), id(c_label), TextAlign::BASELINE_LEFT, label);
+
+        if (s->has_state()) {
+          float v = s->state;
+          char buf[12];
+          snprintf(buf, sizeof(buf), show_sign ? "%+.0f" : "%.0f", v);
+
+          Color col = id(c_text);
+          if (show_sign) {
+            col = (v >= 0.0f) ? id(c_green) : id(c_red);
+          }
+
+          it.print(276, yb, id(f_value_compact), col, TextAlign::BASELINE_RIGHT, buf);
+          it.print(282, yb, id(f_unit_compact), id(c_dim), TextAlign::BASELINE_LEFT, "W");
+        } else {
+          it.print(276, yb, id(f_value_compact), id(c_dim), TextAlign::BASELINE_RIGHT, "--");
+        }
+      };
+
+      // ------------------------------------------------------------
+      // Tarif HP / HC
+      // ------------------------------------------------------------
+      bool has_tarif = id(tarif).has_state();
+      bool is_hc = false;
+
+      if (has_tarif) {
+        const std::string& tar = id(tarif).state;
+        is_hc = (tar.find("HC") != std::string::npos) ||
+                (tar.find("CREUSE") != std::string::npos) ||
+                (tar.find("creuse") != std::string::npos);
+      }
+
+      // ------------------------------------------------------------
+      // Header
+      // ------------------------------------------------------------
+      it.print(18, 28, id(f_header), id(c_label), TextAlign::BASELINE_LEFT, "MAISON");
+
+      if (has_tarif) {
+        it.print(
+          302,
+          28,
+          id(f_header),
+          is_hc ? id(c_green) : id(c_orange),
+          TextAlign::BASELINE_RIGHT,
+          is_hc ? "HC" : "HP"
+        );
+      } else {
+        it.print(302, 28, id(f_header), id(c_dim), TextAlign::BASELINE_RIGHT, "--");
+      }
+
+      it.line(12, 42, 308, 42, id(c_sep));
+
+      // ------------------------------------------------------------
+      // Températures
+      // ------------------------------------------------------------
+      Color ext_col  = id(t_ext).has_state()  ? color_temp_ext(id(t_ext).state)   : id(c_dim);
+      Color int_col  = id(t_int).has_state()  ? color_temp_int(id(t_int).state)   : id(c_dim);
+      Color pool_col = id(t_pool).has_state() ? color_temp_pool(id(t_pool).state) : id(c_dim);
+
+      draw_temp_row(92,  ICON_SUN,  ext_col,  "Extérieur", id(t_ext),  ext_col);
+      draw_temp_row(144, ICON_HOME, int_col,  "Intérieur", id(t_int),  int_col);
+      draw_temp_row(196, ICON_POOL, pool_col, "Piscine",   id(t_pool), pool_col);
+
+      // ------------------------------------------------------------
+      // Séparateur unique entre températures et énergie
+      // ------------------------------------------------------------
+      it.line(12, 226, 308, 226, id(c_sep));
+
+      // ------------------------------------------------------------
+      // Energie
+      // ------------------------------------------------------------
+      draw_power_row(278, ICON_SUN,  id(c_yellow), "Solaire", id(p_prod_solaire), true);
+      draw_power_row(330, ICON_HOME, id(c_orange), "Maison",  id(p_house), false);
+
+
+      // Zoé
+      it.print(30, 382, id(f_icons_compact), id(c_blue), TextAlign::BASELINE_CENTER, ICON_FLASH);
+      it.print(64, 382, id(f_label_compact), id(c_label), TextAlign::BASELINE_LEFT, "Zoé");
+
+      if (id(zoe_battery_percent).has_state() && id(zoe_range_km).has_state()) {
+        char buf[24];
+        snprintf(
+          buf,
+          sizeof(buf),
+          "%.0f%% %.0fkm",
+          id(zoe_battery_percent).state,
+          id(zoe_range_km).state
+        );
+
+        Color zoe_col = id(c_green);
+        if (id(zoe_battery_percent).state < 20.0f) {
+          zoe_col = id(c_red);
+        } else if (id(zoe_battery_percent).state < 40.0f) {
+          zoe_col = id(c_orange);
+        }
+
+        it.print(300, 382, id(f_zoe_compact), zoe_col, TextAlign::BASELINE_RIGHT, buf);
+      } else {
+        it.print(300, 382, id(f_zoe_compact), id(c_dim), TextAlign::BASELINE_RIGHT, "--");
+      }
+
+      // ------------------------------------------------------------
+      // Footer
+      // ------------------------------------------------------------
+      it.line(12, 430, 308, 430, id(c_sep));
+
+      auto t = id(ha_time).now();
+      if (t.is_valid()) {
+        char buf[24];
+        t.strftime(buf, sizeof(buf), "MAJ %H:%M");
+        it.print(18, 462, id(f_footer), id(c_dim), TextAlign::BASELINE_LEFT, buf);
+      } else {
+        it.print(18, 462, id(f_footer), id(c_dim), TextAlign::BASELINE_LEFT, "Connexion...");
+      }
+
+      const char* w = id(api_status).state ? ICON_WIFI : ICON_NOWIFI;
+      it.print(300, 462, id(f_wifi), id(c_dim), TextAlign::BASELINE_RIGHT, w);
+      
