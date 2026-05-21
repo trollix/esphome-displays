@@ -44,7 +44,7 @@ Compter ~25-30 € sur Amazon (DIYmalls), ~15-20 € sur AliExpress.
 | Touch SCL | 8 | `i2c.scl` |
 | Backlight (PWM) | 1 | `output.ledc` |
 
-⚠️ **Pas de `reset_pin`** pour le touch — le driver `axs15231` n'en a pas besoin sur ce board.
+**Pas de `reset_pin`** pour le touch — le driver `axs15231` n'en a pas besoin sur ce board.
 
 ---
 
@@ -53,16 +53,16 @@ Compter ~25-30 € sur Amazon (DIYmalls), ~15-20 € sur AliExpress.
 ```
 ┌──────────────────────┐  y=0
 │ MAISON           HC  │  y=28  (header + tarif coloré)
-│ ────────────────────  │  y=42
-│ ☀ Extérieur  14.6 °C │  y=92
-│ 🏠 Intérieur  21.0 °C │  y=144
-│ 🏊 Piscine    19.8 °C │  y=196
-│ ────────────────────  │  y=226
-│ ☀ Solaire    +1450 W │  y=278
-│ 🏠 Maison      620 W  │  y=330
-│ ⚡ Zoé    62% 145km   │  y=382
-│ ────────────────────  │  y=430
-│ MAJ 14:32         📶  │  y=462
+│ ──────────────────── │  y=42
+│ * Extérieur  14.6 °C │  y=92
+│ * Intérieur  21.0 °C │  y=144
+│ * Piscine    19.8 °C │  y=196
+│ ──────────────────── │  y=226
+│ * Solaire    +1450 W │  y=278
+│ * Maison      620 W  │  y=330
+│ * Zoé    62% 145km   │  y=382
+│ ──────────────────── │  y=430
+│ MAJ 14:32            │  y=462
 └──────────────────────┘  y=480
 ```
 
