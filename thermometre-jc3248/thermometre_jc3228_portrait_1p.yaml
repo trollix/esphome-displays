@@ -215,7 +215,7 @@ font:
   - file: "fonts/Roboto-Medium.ttf"
     id: f_zoe_compact
     size: 26
-    glyphs: "0123456789.-+ %km"
+    glyphs: "0123456789.-+ %kmnai"
 
   - file: "fonts/materialdesignicons-webfont.ttf"
     id: f_icons_compact
@@ -441,7 +441,9 @@ display:
       it.print(30, 382, id(f_icons_compact), id(c_blue), TextAlign::BASELINE_CENTER, ICON_FLASH);
       it.print(64, 382, id(f_label_compact), id(c_label), TextAlign::BASELINE_LEFT, "Zoé");
 
-      if (id(zoe_battery_percent).has_state() && id(zoe_range_km).has_state()) {
+      if (id(zoe_battery_percent).has_state() && id(zoe_range_km).has_state()
+          && !std::isnan(id(zoe_battery_percent).state)
+          && !std::isnan(id(zoe_range_km).state)) {
         char buf[24];
         snprintf(
           buf,
